@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">TAG-Droid</string>
+    <string name="tag">TAG</string>
+    <string name="register">REGISTER</string>
+    <string name="submit">SUBMIT</string>
+    <string name="key">key</string>
+    <string name="pin">pin</string>
+    <string name="defaultstation">bbc_radio_one</string>
+    <string name="station">Station</string>
+    <string name="output">Output</string>
+
+</resources>
