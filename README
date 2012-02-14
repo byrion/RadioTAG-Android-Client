@@ -1,0 +1,10 @@
+RadioTAG Client for Android
+===========================
+
+This is an Android RadioTAG client which uses the BBC's prototype server implementation.
+There is no guarantee the server will be running or that the client will remain compatible.
+
+RadioTAG is an application of RadioDNS. More information on RadioDNS and RadioTAG can be found at the following URLs:
+
+* [RadioDNS](http://radiodns.org)
+* [RadioTAG on the BBC R&D Blog](http://www.bbc.co.uk/blogs/researchanddevelopment/2011/09/radiotag.shtml)
