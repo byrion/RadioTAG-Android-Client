@@ -1,3 +1,35 @@
+/**
+ * A RadioTAG prototype implementation for Android facilitating the
+ * tagging of radio content as described in the draft RadioTAG
+ * specification currently available on the BBC Research & Development
+ * blog.
+ * 
+ * Information on RadioTAG can be found on the blog at:
+ * http://www.bbc.co.uk/blogs/researchanddevelopment/2011/09/radiotag.shtml.
+ * 
+ * RadioTAG is part of the RadioDNS group of applications. Further information
+ * is available at: http://radiodns.org.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.    
+ * See the License for the specific language governing permissions and 
+ * limitations under the License.
+ * 
+ * @package   RadioTAG-Android-Client
+ * @author    Byrion Smith <dev@byrion.com>
+ * @license   http://www.apache.org/licenses/LICENSE-2.0
+ * @version   0.1
+ * @link      http://www.bbc.co.uk/blogs/researchanddevelopment/2011/09/radiotag.shtml
+ *
+ */
+
 package com.byrion.droid.tag;
 
 import java.io.IOException;
@@ -6,9 +38,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
@@ -39,6 +69,9 @@ public class MainView extends Activity implements View.OnClickListener {
 	static final String RADIOTAG_REGISTRATION_PATH = "/registration_key";
 	static final String RADIOTAG_REGISTER_PATH = "/register";
 	
+	static final int RADIOTAG_MUST_AUTH = 0x102;
+	static final int RADIOTAG_CLIENT_AUTHORISED = 0x103;
+	
 	static final int UPDATE_OUTPUT_VIEW = 0x203;
 	static final int UPDATE_KEY_VIEW = 0x204;
 	
@@ -54,6 +87,10 @@ public class MainView extends Activity implements View.OnClickListener {
 	
 	String mAuthToken = null;
 	String mGrantToken = null;
+	
+	// ensure Tag is re-sent if the client was not authorised
+	// to send on the first attempt
+	boolean resendTag = false;
 	
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -84,10 +121,8 @@ public class MainView extends Activity implements View.OnClickListener {
 			try {
 				sendTag();
 			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			
@@ -98,10 +133,8 @@ public class MainView extends Activity implements View.OnClickListener {
 			try {
 				register();
 			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			
@@ -112,10 +145,8 @@ public class MainView extends Activity implements View.OnClickListener {
 			try {
 				submitRegistration();
 			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			
@@ -127,7 +158,24 @@ public class MainView extends Activity implements View.OnClickListener {
 		public void handleMessage(Message msg) {
 			super.handleMessage(msg);
             switch (msg.what) {
-            
+            case RADIOTAG_MUST_AUTH:
+            	try {
+					sendTokenRequest();
+				} catch (UnsupportedEncodingException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+            	break;
+            case RADIOTAG_CLIENT_AUTHORISED:
+            	try {
+					sendTag();
+				} catch (UnsupportedEncodingException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+            	break;
             }
 		}
 	};
@@ -146,15 +194,22 @@ public class MainView extends Activity implements View.OnClickListener {
 		}
 	};
 	
+	/**
+	 * Make a TAG request to the /tag end point. Supplies an auth token header if
+	 * available (the client has been previously registered) 
+	 * 
+	 * @throws UnsupportedEncodingException
+	 * @throws IOException
+	 */
 	private void sendTag() throws UnsupportedEncodingException, IOException {		
 		
 		mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n>>> SEND TAG (/tag)"));
 		
-		Map<String, String> headers = null;
+		List<NameValuePair> headers = null;
 		if (mAuthToken != null) {
 			mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-RadioTAG-Auth-Token:" + mAuthToken));
-			headers = new HashMap<String, String>();
-			headers.put("X-RadioTAG-Auth-Token", mAuthToken);
+			headers = new ArrayList<NameValuePair>();
+			headers.add(new BasicNameValuePair("X-RadioTAG-Auth-Token", mAuthToken));
 		}
 		
 		List<NameValuePair> postData = new ArrayList<NameValuePair>();
@@ -167,11 +222,18 @@ public class MainView extends Activity implements View.OnClickListener {
 		new Thread(httpPost).start();
 	}
 	
+	/**
+	 * Make a request for a Grant Token to enable the client to change its status level
+	 * (eg. from 'unpaired' to 'can_register')
+	 * 
+	 * @throws UnsupportedEncodingException
+	 * @throws IOException
+	 */
 	private void sendTokenRequest() throws UnsupportedEncodingException, IOException {
 		
 		mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n>>> Token request (/token)"));
 		
-		Map<String, String> headers = null;
+		List<NameValuePair> headers = null;
 		
 		List<NameValuePair> postData = new ArrayList<NameValuePair>();
 		postData.add(new BasicNameValuePair("grant_scope", "unpaired"));
@@ -183,11 +245,17 @@ public class MainView extends Activity implements View.OnClickListener {
 		new Thread(httpPost).start();
 	}
 	
+	/**
+	 * Send registration request to obtain registration key
+	 * 
+	 * @throws UnsupportedEncodingException
+	 * @throws IOException
+	 */
 	private void register() throws UnsupportedEncodingException, IOException {
 		
 		mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n>>> Registration request (/registration_key)"));
 		
-		Map<String, String> headers = null;
+		List<NameValuePair> headers = null;
 		
 		List<NameValuePair> postData = new ArrayList<NameValuePair>();
 		postData.add(new BasicNameValuePair("grant_scope", "can_register"));
@@ -199,12 +267,18 @@ public class MainView extends Activity implements View.OnClickListener {
 		new Thread(httpPost).start();
 	}
 	
+	/**
+	 * Send registration request with PIN to complete user authorisation
+	 * 
+	 * @throws UnsupportedEncodingException
+	 * @throws IOException
+	 */
 	private void submitRegistration() throws UnsupportedEncodingException, IOException {
 		
 		mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n>>> PIN Submission (/register)"));
 		
-		Map<String, String> headers = new HashMap<String, String>();
-		headers.put("X-RadioTAG-Auth-Token", mAuthToken);
+		List<NameValuePair> headers = new ArrayList<NameValuePair>();
+		headers.add(new BasicNameValuePair("X-RadioTAG-Auth-Token", mAuthToken));
 		
 		List<NameValuePair> postData = new ArrayList<NameValuePair>();
 		postData.add(new BasicNameValuePair("registration_key", mETxtKey.getEditableText().toString()));
@@ -217,6 +291,13 @@ public class MainView extends Activity implements View.OnClickListener {
 		new Thread(httpPost).start();
 	}
 	
+	/**
+	 * Convenience method to swap a stream to a String
+	 * 
+	 * @param is
+	 * @return String
+	 * @throws IOException
+	 */
 	private String streamToString(InputStream is) throws IOException {
 		
 		final char[] buffer = new char[0x10000];
@@ -232,14 +313,18 @@ public class MainView extends Activity implements View.OnClickListener {
 		return out.toString();
 	}
     
+	/**
+	 * Class for ASync HTTP post
+	 *
+	 */
 	private class HTTPPost implements Runnable {
 		
 		Handler _returnHandler;
 		String _url;
-		Map<String, String> _headers;
+		List<NameValuePair> _headers;
 		List<NameValuePair> _postData;
 		
-		public HTTPPost(Handler returnHandler, String url, Map<String, String> headers, List<NameValuePair> postData) {
+		public HTTPPost(Handler returnHandler, String url, List<NameValuePair> headers, List<NameValuePair> postData) {
 			_returnHandler = returnHandler;
 			_url = url;
 			_headers = headers;
@@ -254,7 +339,7 @@ public class MainView extends Activity implements View.OnClickListener {
 			}
 		}
 		
-		private void httpPostRequestSync(String url, Map<String, String> headers, List<NameValuePair> postData) throws UnsupportedEncodingException, IOException {
+		private void httpPostRequestSync(String url, List<NameValuePair> headers, List<NameValuePair> postData) throws UnsupportedEncodingException, IOException {
 			
 			HttpPost httpPost = new HttpPost(url);
 			try {
@@ -266,8 +351,8 @@ public class MainView extends Activity implements View.OnClickListener {
 			}
 			
 			if (headers != null) {
-				for (Map.Entry<String, String> entry : headers.entrySet()) {
-					httpPost.addHeader(entry.getKey(), entry.getValue());					
+				for (NameValuePair header : headers) {
+					httpPost.addHeader(header.getName(), header.getValue());
 				}
 			}
 			
@@ -278,10 +363,10 @@ public class MainView extends Activity implements View.OnClickListener {
 				switch(response.getStatusLine().getStatusCode()) {
 				case HttpStatus.SC_CREATED:
 				case HttpStatus.SC_OK:
-					
-					Header[] grantTokenHeaders = response.getHeaders("X-Radiotag-Grant-Token");
-					if (grantTokenHeaders.length > 0) {
-						mGrantToken = grantTokenHeaders[0].getValue();
+				{
+					if (response.getHeaders("X-Radiotag-Grant-Token").length > 0) {
+						// Tag response to authorised but unregistered client
+						mGrantToken = response.getHeaders("X-Radiotag-Grant-Token")[0].getValue();
 
 						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n<<< Tag response"));
 						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-Radiotag-Grant-Token: " + mGrantToken));
@@ -296,25 +381,24 @@ public class MainView extends Activity implements View.OnClickListener {
 						break;
 					}
 					
-					{
-					Header[] authTokenHeaders = response.getHeaders("X-RadioTAG-Auth-Token");
-						if (authTokenHeaders.length > 0) {
-							mAuthToken = authTokenHeaders[0].getValue();
-							String accountName = response.getHeaders("X-RadioTAG-Account-Name")[0].getValue();
-							
-							mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n<<< Tag response"));
-							mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-RadioTAG-Auth-Token: " + mAuthToken));
-							mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-RadioTAG-Account-Name: " + accountName));
-							
-							mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n\nHello " + accountName + "\n"));
-							
-							break;
-						}
+					if (response.getHeaders("X-RadioTAG-Auth-Token").length > 0) {
+						// Tag response to registered client
+						
+						mAuthToken = response.getHeaders("X-RadioTAG-Auth-Token")[0].getValue();
+						String accountName = response.getHeaders("X-RadioTAG-Account-Name")[0].getValue();
+						
+						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n<<< Tag response"));
+						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-RadioTAG-Auth-Token: " + mAuthToken));
+						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-RadioTAG-Account-Name: " + accountName));
+						
+						break;
 					}
 					
 					break;
+				}
 				case HttpStatus.SC_UNAUTHORIZED:
-					// must request token
+					// Response to anonymous client who must authorise in order to tag
+					
 					Log.d(TAG, "Must request token");
 					
 					mGrantToken = response.getHeaders("X-Radiotag-Grant-Token")[0].getValue();
@@ -322,33 +406,47 @@ public class MainView extends Activity implements View.OnClickListener {
 					mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n<<< Must Request Token"));
 					mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-Radiotag-Grant-Token: " + mGrantToken));
 
-					sendTokenRequest();
+					// the tag should be sent once authorised
+					resendTag = true;
+					
+					_returnHandler.sendMessage(Message.obtain(_returnHandler, RADIOTAG_MUST_AUTH));
 					
 					break;
 				case HttpStatus.SC_NO_CONTENT:
-					// auth token returned
-					
-					Header[] authTokenHeaders = response.getHeaders("X-RadioTAG-Auth-Token");
-					if (authTokenHeaders.length > 0) {
+
+					if (response.getHeaders("X-RadioTAG-Auth-Token").length > 0) {
+						// response with auth token to authorisation/registration request
+						// client becomes authorised/registered on receipt of this auth token
+						
 						Log.d(TAG, "Auth token returned");
 						
-						mAuthToken = authTokenHeaders[0].getValue();
+						mAuthToken = response.getHeaders("X-RadioTAG-Auth-Token")[0].getValue();
 						
 						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n<<< Auth Token Returned"));
 						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-RadioTAG-Auth-Token: " + mAuthToken));
-						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n\n== RESEND TAG ==\n"));
 						
-						Log.d(TAG, "Trying tag again...");
-						sendTag();
+						if (response.getHeaders("X-RadioTAG-Account-Name").length > 0) {
+							String accountName = response.getHeaders("X-RadioTAG-Account-Name")[0].getValue();
+							mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "    Header: X-RadioTAG-Account-Name: " + accountName));
+							mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n\nHello " + accountName + "\n"));
+						}
+						
+						if (resendTag) {
+							Log.d(TAG, "Trying tag again...");
+							resendTag = false;
+							mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_OUTPUT_VIEW, "\n\n== RESEND TAG ==\n"));
+							_returnHandler.sendMessage(Message.obtain(_returnHandler, RADIOTAG_CLIENT_AUTHORISED));
+						}
 						
 						break;
 					}
 					
-					Header[] registrationKeyHeaders = response.getHeaders("X-RadioTAG-Registration-Key");
-					if (registrationKeyHeaders.length > 0) {
+					if (response.getHeaders("X-RadioTAG-Registration-Key").length > 0) {
+						// response to registration_key request for unregistered client
+						
 						Log.d(TAG, "Registration key returned");
 						
-						String registrationKey = registrationKeyHeaders[0].getValue();
+						String registrationKey = response.getHeaders("X-RadioTAG-Registration-Key")[0].getValue();
 						String registrationUrl = response.getHeaders("X-RadioTAG-Registration-Url")[0].getValue();
 						
 						mViewHandler.sendMessage(Message.obtain(mViewHandler, UPDATE_KEY_VIEW, registrationKey));
